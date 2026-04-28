@@ -1,0 +1,15 @@
+services:
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    environment:
+      ADDR: ":8080"
+    # Port not exposed to the host — only the frontend container reaches it.
+
+  frontend:
+    build: ./frontend
+    restart: unless-stopped
+    ports:
+      - "3001:80"   # Change 3001 to any free port on your droplet.
+    depends_on:
+      - backend
