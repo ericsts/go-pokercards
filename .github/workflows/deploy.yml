@@ -41,7 +41,7 @@ jobs:
           # Set it as a GitHub Secret (Settings → Secrets → Actions).
           script: |
             set -e
-            cd ${{ secrets.DEPLOY_PATH }}
+            cd /opt/go-pokercards
             git pull origin main
             docker compose up -d --build --remove-orphans
             # Limpa imagens antigas para não ocupar espaço no disco
