@@ -343,3 +343,5 @@ O método `ToView()` no backend nunca expõe o valor do voto enquanto `Revealed 
 ### Estado em memória
 
 Não há banco de dados. O estado de todas as salas vive no processo Go. Isso simplifica o projeto para fins de aprendizado, mas significa que as salas são perdidas se o servidor reiniciar. Para produção real, bastaria substituir o `Store` por uma implementação com Redis.
+
+FIM
