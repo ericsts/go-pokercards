@@ -1,48 +1,59 @@
-name: CI/CD
+name: Deploy para Droplet
 
 on:
   push:
     branches: [main]
-  pull_request:
-    branches: [main]
+  workflow_dispatch:
 
 jobs:
-  # ─── Roda os testes do backend em toda PR e push ──────────────────────────
-  test:
-    name: Go tests
+  deploy:
+    name: Build e deploy via SSH
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-go@v5
         with:
-          go-version-file: backend/go.mod
-          cache-dependency-path: backend/go.sum
+          go-version: "1.26.2"
 
-      - name: Run tests
+      - name: Build backend
         working-directory: backend
-        run: go test ./...
+        run: GOOS=linux GOARCH=amd64 go test ./... && GOOS=linux GOARCH=amd64 go build -o pokercards-backend ./cmd/server
 
-  # ─── Deploy só quando o push for para main (não em PRs) ──────────────────
-  deploy:
-    name: Deploy to droplet
-    needs: test
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-
-    steps:
-      - name: SSH into droplet and deploy
-        uses: appleboy/ssh-action@v1.0.3
+      - uses: actions/setup-node@v4
         with:
-          host:     ${{ secrets.DROPLET_HOST }}
-          username: ${{ secrets.DROPLET_USER }}
-          key:      ${{ secrets.DROPLET_SSH_KEY }}
-          # DEPLOY_PATH must match where you cloned the repo on the droplet.
-          # Set it as a GitHub Secret (Settings → Secrets → Actions).
-          script: |
-            set -e
-            cd /opt/go-pokercards
-            git pull origin main
-            docker compose up -d --build --remove-orphans
-            # Limpa imagens antigas para não ocupar espaço no disco
-            docker image prune -f
+          node-version: "20"
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm ci && npm run build
+
+      - name: Configurar SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          echo "${{ vars.DEPLOY_HOST_KEY }}" > ~/.ssh/known_hosts
+
+      - name: Enviar backend
+        run: |
+          rsync -avz -e "ssh -i ~/.ssh/deploy_key -o UserKnownHostsFile=~/.ssh/known_hosts" \
+            backend/pokercards-backend \
+            ${{ vars.DEPLOY_USER }}@${{ vars.DEPLOY_HOST }}:${{ vars.DEPLOY_BACKEND_PATH }}/
+
+      - name: Enviar frontend
+        run: |
+          rsync -avz --delete -e "ssh -i ~/.ssh/deploy_key -o UserKnownHostsFile=~/.ssh/known_hosts" \
+            frontend/dist/ \
+            ${{ vars.DEPLOY_USER }}@${{ vars.DEPLOY_HOST }}:${{ vars.DEPLOY_FRONTEND_PATH }}/
+
+      - name: Reiniciar serviço
+        run: |
+          ssh -i ~/.ssh/deploy_key -o UserKnownHostsFile=~/.ssh/known_hosts \
+            ${{ vars.DEPLOY_USER }}@${{ vars.DEPLOY_HOST }} \
+            "chmod +x ${{ vars.DEPLOY_BACKEND_PATH }}/pokercards-backend && XDG_RUNTIME_DIR=/run/user/\$(id -u) systemctl --user restart pokercards"
+
+      - name: Limpar chave SSH
+        if: always()
+        run: rm -f ~/.ssh/deploy_key

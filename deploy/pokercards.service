@@ -1,0 +1,13 @@
+[Unit]
+Description=go-pokercards (planning poker WebSocket backend)
+After=network.target
+
+[Service]
+WorkingDirectory=/opt/go-pokercards
+ExecStart=/opt/go-pokercards/pokercards-backend
+Environment=ADDR=:8083
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=default.target
